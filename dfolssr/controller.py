@@ -458,26 +458,42 @@ class Controller(object):
 
         if self.h == None:
             if self.model.projections:
-                d, gnew, crvmin = ctrsbox_pgd(self.model.xopt(abs_coordinates=True), gopt, H, self.model.projections, self.delta, d_max_iters=params("dykstra.max_iters"), d_tol=params("dykstra.d_tol"))
+                # Running PGD/SFISTA is generally slower than trsbox, so don't do this if gopt or H have bad values
+                # (this will ultimately lead to a manual setting of d=0 and calling a safety step anyway)
+                if np.any(np.isnan(gopt)) or np.any(np.isnan(H)) or not np.all(np.isfinite(gopt)) or not np.all(
+                        np.isfinite(H)):
+                    module_logger.debug("nan/inf values in gopt and/or H, skipping ctrsbox_pgd")
+                    d = np.zeros(gopt.shape)
+                    gnew = gopt.copy()
+                    crvmin = -1
+                else:
+                    d, gnew, crvmin = ctrsbox_pgd(self.model.xopt(abs_coordinates=True), gopt, H, self.model.projections, self.delta, d_max_iters=params("dykstra.max_iters"), d_tol=params("dykstra.d_tol"))
             else:
                 d, gnew, crvmin = trsbox(self.model.xopt(), gopt, H, self.model.sl, self.model.su, self.delta)
         else:
-            if self.model.projections:
+            # Running PGD/SFISTA is generally slower than trsbox, so don't do this if gopt or H have bad values
+            # (this will ultimately lead to a manual setting of d=0 and calling a safety step anyway)
+            if np.any(np.isnan(gopt)) or np.any(np.isnan(H)) or not np.all(np.isfinite(gopt)) or not np.all(np.isfinite(H)):
+                module_logger.debug("nan/inf values in gopt and/or H, skipping ctrsbox_sfista")
+                d = np.zeros(gopt.shape)
+                gnew = gopt.copy()
+                crvmin = -1
+            elif self.model.projections:
                 d, gnew, crvmin = ctrsbox_sfista(self.model.xopt(abs_coordinates=True), gopt, H, self.model.projections, self.delta,
                                      h=self.h, argsh = self.argsh, L_h=self.L_h, prox_uh=self.prox_uh, argsprox=self.argsprox, func_tol=self.func_tol,
-                                     d_max_iters=params("dykstra.max_iters"), d_tol=params("dykstra.d_tol"))
+                                     d_max_iters=params("dykstra.max_iters"), d_tol=params("dykstra.d_tol"), sfista_iters_scale=params("sfista.max_iters_scaling"))
             else:
                 # NOTE: alternative way if using trsbox
                 # d, gnew, crvmin = trsbox(self.model.xopt(), gopt, H, self.model.sl, self.model.su, self.delta)
                 proj = lambda x: pbox(x, self.model.sl, self.model.su)
                 d, gnew, crvmin = ctrsbox_sfista(self.model.xopt(abs_coordinates=True), gopt, H, [proj], self.delta,
                                       h=self.h, argsh = self.argsh, L_h=self.L_h, prox_uh=self.prox_uh, argsprox=self.argsprox, func_tol=self.func_tol,
-                                      d_max_iters=params("dykstra.max_iters"), d_tol=params("dykstra.d_tol"))
+                                      d_max_iters=params("dykstra.max_iters"), d_tol=params("dykstra.d_tol"), sfista_iters_scale=params("sfista.max_iters_scaling"))
             # NOTE: check sufficient decrease. If increase in the model, set zero step
             u = calculate_u(H, self.L_h, self.func_tol)
             pred_reduction = moreau_envelope(self.model.xopt(abs_coordinates=True), self.h, self.argsh, u, self.prox_uh, self.argsprox) - model_value(gopt, H, d, self.model.xopt(abs_coordinates=True), h=self.h, argsh=self.argsh, u=u, prox_uh=self.prox_uh, argsprox=self.argsprox)
             if pred_reduction < 0.0:
-                print("bad d", d)
+                module_logger.debug("bad d", d)
                 d = np.zeros(d.shape)
         return d, gopt, H, gnew, crvmin
 
@@ -672,7 +688,7 @@ class Controller(object):
             u = calculate_u(H, self.L_h, self.func_tol)
             obj += moreau_envelope(x+d, self.h, self.argsh, u, self.prox_uh, self.argsprox)
             pred_reduction = moreau_envelope(x, self.h, self.argsh, u, self.prox_uh, self.argsprox) - model_value(gopt, H, d, x, h=self.h, argsh=self.argsh, u=u, prox_uh=self.prox_uh, argsprox=self.argsprox)
-            actual_reduction = self.model.est_objopt() - obj
+            actual_reduction = self.model.est_objopt() - obj - 1.0 * self.delta**1.5
         else:
             actual_reduction = self.model.objopt() - obj
         self.diffs = [abs(actual_reduction - pred_reduction), self.diffs[0], self.diffs[1]]

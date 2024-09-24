@@ -112,6 +112,7 @@ class ParameterList(object):
         # Dykstra's algorithm
         self.params["dykstra.d_tol"] = 1e-10
         self.params["dykstra.max_iters"] = 100
+        self.params["sfista.max_iters_scaling"] = 1.0
         # Matrix rank algorithm
         self.params["matrix_rank.r_tol"] = 1e-18
 
@@ -266,6 +267,8 @@ class ParameterList(object):
             type_str, nonetype_ok, lower, upper = 'float', False, 0.0, None
         elif key == "dykstra.max_iters":
             type_str, nonetype_ok, lower, upper = 'int', False, 0, None
+        elif key == "sfista.max_iters_scaling":
+            type_str, nonetype_ok, lower, upper = 'float', False, 1.0, None
         elif key == "matrix_rank.r_tol":
             type_str, nonetype_ok, lower, upper = 'float', False, 0.0, None
         else:

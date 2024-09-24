@@ -85,7 +85,8 @@ __all__ = ['ctrsbox_sfista', 'ctrsbox_pgd', 'ctrsbox_geometry', 'trsbox', 'trsbo
 
 ZERO_THRESH = 1e-14
 
-def ctrsbox_sfista(xopt, g, H, projections, delta, h=None, argsh=(), L_h=None, prox_uh=None, argsprox=(), func_tol=1e-3, d_max_iters=100, d_tol=1e-10, tikhonov_reg=10, use_fortran=USE_FORTRAN):
+def ctrsbox_sfista(xopt, g, H, projections, delta, h=None, argsh=(), L_h=None, prox_uh=None, argsprox=(), func_tol=1e-3,
+                   d_max_iters=100, d_tol=1e-10, tikhonov_reg=10, use_fortran=USE_FORTRAN, sfista_iters_scale=1):
     n = xopt.size
     # NOTE: L_h, prox_uh unable to check, add instruction to prox_uh
     assert xopt.shape == (n,), "xopt has wrong shape (should be vector)"
@@ -95,7 +96,7 @@ def ctrsbox_sfista(xopt, g, H, projections, delta, h=None, argsh=(), L_h=None, p
     assert np.allclose(H, H.T), "H must be symmetric"
     assert delta > 0.0, "delta must be strictly positive"
 
-    print("new call of sfista")
+    # print("new call of sfista")
     # Initialization
     d = np.zeros(n) # start with zero vector
     gnew = g.copy()
@@ -115,11 +116,18 @@ def ctrsbox_sfista(xopt, g, H, projections, delta, h=None, argsh=(), L_h=None, p
     # L_m = abs(1 - delta/np.linalg.norm(H_inv_g_norm, 2)) * g_norm
     L_grad_m = H_norm
 
-    # Calculate smoothing parameter u(func_tol)
-    u = 2 * func_tol / (L_h ** 2 + L_h * sqrt(L_h ** 2 + 2 * L_grad_m * func_tol))
+
 
     # Calculate max iterations k(func_tol)
-    MAX_LOOP_ITERS = min(ceil(delta / func_tol * (2 * L_h + sqrt(2 * L_grad_m * func_tol))), 500)
+    try:
+        # MAX_LOOP_ITERS = min(ceil(delta / func_tol * (2 * L_h + sqrt(2 * L_grad_m * func_tol))), 500)
+        MAX_LOOP_ITERS = ceil(min(sfista_iters_scale * delta * (L_h + sqrt(L_h * L_h + 2 * L_grad_m * func_tol)) / func_tol, 500))
+    except ValueError:  # sometimes get NaN for first value, so just use 500 in this case
+        MAX_LOOP_ITERS = 500
+
+    # Calculate smoothing parameter u(func_tol)
+    u = 2 * func_tol / (L_h ** 2 + L_h * sqrt(L_h ** 2 + 2 * L_grad_m * func_tol))
+    # u = 2 * delta / (MAX_LOOP_ITERS * L_h)  # smoothing parameter
 
     def gradient_Fu(xopt, g, H, u, prox_uh, d, argsprox):
     # Calculate gradient_Fu,

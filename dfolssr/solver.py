@@ -1516,9 +1516,9 @@ def solve_main(objfun, x0, argsf, xl, xu, projections, npt, rhobeg, rhoend, maxf
                             nruns_so_far += 1
                             break  # quit
                             # (end trust region step)
-            print(f"done with u = {func_tol} - resetting counters for termination criteria")
+            module_logger.info(f"done with u = {func_tol} - resetting counters for termination criteria")
             func_tol *= func_tol_dec
-            print(func_tol)
+            module_logger.info(func_tol)
             control.reset_controller(func_tol)
             succ_steps_not_improvement = [False]*params("restarts.soft.max_fake_successful_steps")
 
@@ -1756,7 +1756,7 @@ def solve(objfun, x0, h=None, argsh=(), L_h=None, prox_uh=None, argsprox=(), fun
     if do_logging:
         module_logger.info("Did a total of %g run(s)" % nruns)
     
-    print("xmin_ff", xmin)
+    module_logger.info("xmin_ff", xmin)
 
     return results
 
